@@ -4,3 +4,6 @@
 #include "Modules/ModuleManager.h"
 
 IMPLEMENT_PRIMARY_GAME_MODULE( FDefaultGameModuleImpl, HuntersGame, "HuntersGame" );
+
+DEFINE_LOG_CATEGORY(LogHuntersGame)
+ 
