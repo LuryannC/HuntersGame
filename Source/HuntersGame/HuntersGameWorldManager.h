@@ -75,18 +75,19 @@ private:
 	UFUNCTION(BlueprintCallable)
 	static int32 LatitudeToTileY(float Lat, int32 Zoom);
 	
-	// UFUNCTION(BlueprintCallable)
-	// void SetPlayerCoords(float Lat, float Lon);
-	//
-	// UFUNCTION(BlueprintCallable, CallInEditor)
-	// void UpdateMap();
-	//
+	UFUNCTION(BlueprintCallable)
+	void SetPlayerCoords(float Lat, float Lon);
+	
+	UFUNCTION(BlueprintCallable, CallInEditor)
+	void UpdateMap();
+	
 	// UFUNCTION(BlueprintCallable)
 	// void LoadTile(int32 TileX, int32 TileY);
 	//
-	// UFUNCTION(BlueprintCallable)
-	// void UnloadTiles(int32 TileX, int32 TileY);
-	//
+	
+	UFUNCTION(BlueprintCallable)
+	void UnloadTiles(int32 TileX, int32 TileY);
+	
 	// UFUNCTION(BlueprintCallable)
 	// FPlayerTileLocation GetPlayerTile();
 	//
@@ -115,7 +116,7 @@ protected:
 	
 	FTimerHandle UpdateMapTimerHandle;
 
-	UPROPERTY(BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FPlayerCoords PlayerCoords;
 	
 	UPROPERTY(BlueprintReadWrite)
@@ -129,6 +130,4 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TObjectPtr<UMaterial> BaseMaterial;
-	
-	TArray<UStaticMeshComponent*> TileMeshes;
 };

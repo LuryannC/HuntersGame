@@ -20,10 +20,10 @@ void AHuntersGameWorldManager::BeginPlay()
 		PlayerActor = PC->GetPawn();
 	}
 
-	// GetWorld()->GetTimerManager().SetTimer(UpdateMapTimerHandle, [this]
-	// {
-	// 	UpdateMap();		
-	// }, UpdateFrequency, true);
+	GetWorld()->GetTimerManager().SetTimer(UpdateMapTimerHandle, [this]
+	{
+		UpdateMap();		
+	}, UpdateFrequency, true);
 }
 
 
@@ -35,14 +35,15 @@ void AHuntersGameWorldManager::RegenerateGrid()
 
 void AHuntersGameWorldManager::ClearGrid()
 {
-	
-	for (UStaticMeshComponent* Tile : TileMeshes)
+	for (auto& Tile : LoadedTiles)
 	{
-		if (Tile)
-		{
-			Tile->DestroyComponent();
+		if (Tile.Value)
+		{			
+			Tile.Value->DestroyComponent();
 		}
 	}
+	
+	LoadedTiles.Empty();
 }
 
 void AHuntersGameWorldManager::GenerateGrid()
@@ -58,24 +59,29 @@ void AHuntersGameWorldManager::GenerateGrid()
 	{
 		for (int32 y = -LoadRadius; y <= LoadRadius; ++y)
 		{
-			UStaticMeshComponent* TileMesh = NewObject<UStaticMeshComponent>(this);
-			TileMesh->SetStaticMesh(PlaneMesh);
-			TileMesh->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
-
-			FVector TilePosition = GetActorLocation() + FVector(x * TileSize, y * TileSize, 0.0f);
+			FIntPoint TileIndex{PlayerTileX + x,  PlayerTileY + y};
 			
-			TileMesh->SetWorldLocation(TilePosition);
-			
-			TileMesh->SetWorldScale3D(FVector{25.0f, 25.0f, 1.0f});
-			TileMesh->RegisterComponent();
+			if (!LoadedTiles.Contains(TileIndex))
+			{				
+				UStaticMeshComponent* TileMesh = NewObject<UStaticMeshComponent>(this);
+				TileMesh->SetStaticMesh(PlaneMesh);
+				TileMesh->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
 
-			int NewTileX = PlayerTileX + x;
-			int NewTileY = PlayerTileY + y;
+				FVector TilePosition = GetActorLocation() + FVector(x * TileSize, y * TileSize, 0.0f);
 			
-			FString TileURL = GetOSMTextureURL(NewTileX, NewTileY, Zoom);
-			DownloadAndApplyTexture(TileMesh, TileURL);
+				TileMesh->SetWorldLocation(TilePosition);
+			
+				TileMesh->SetWorldScale3D(FVector{25.0f, 25.0f, 1.0f});
+				TileMesh->RegisterComponent();
 
-			TileMeshes.Add(TileMesh);
+				int NewTileX = PlayerTileX + x;
+				int NewTileY = PlayerTileY + y;
+			
+				FString TileURL = GetOSMTextureURL(NewTileX, NewTileY, Zoom);
+				DownloadAndApplyTexture(TileMesh, TileURL);
+
+				LoadedTiles.Add(TileIndex, TileMesh);
+			}
 		}
 	}	
 }
@@ -117,17 +123,38 @@ void AHuntersGameWorldManager::DownloadAndApplyTexture(UStaticMeshComponent* Til
 		return;
 	}
 	
-	// Download and apply texture
+	// Generate a filename from the URL (e.g., hash it)
+	FString FileName = FMD5::HashAnsiString(*URL) + ".png";  
+	FString FilePath = FPaths::ProjectSavedDir() / "CachedTextures" / FileName;
+
+	// Check if file already exists
+	if (FPaths::FileExists(FilePath))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Loading texture from cache: %s"), *FilePath);
+		UTexture2D* CachedTexture = FImageUtils::ImportFileAsTexture2D(FilePath);
+		if (CachedTexture)
+		{
+			MaterialInstance->SetTextureParameterValue("BaseTexture", CachedTexture);
+			return;  // Exit early, no need to download
+		}
+	}	
+		
+	// If not cached, download and save it
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-	Request->OnProcessRequestComplete().BindLambda([TileMesh, MaterialInstance](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
+	Request->OnProcessRequestComplete().BindLambda([TileMesh, MaterialInstance, FilePath](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
 	{
 		if (bWasSuccessful && Response.IsValid())
 		{
-			UTexture2D* DownloadedTexture = FImageUtils::ImportBufferAsTexture2D(Response->GetContent());
+			TArray<uint8> ImageData = Response->GetContent();
+			UTexture2D* DownloadedTexture = FImageUtils::ImportBufferAsTexture2D(ImageData);
 			if (DownloadedTexture)
 			{
 				MaterialInstance->SetTextureParameterValue("BaseTexture", DownloadedTexture);
 				UE_LOG(LogTemp, Warning, TEXT("Texture applied successfully."));
+
+				// Save the downloaded image for future use
+				FFileHelper::SaveArrayToFile(ImageData, *FilePath);
+				UE_LOG(LogTemp, Warning, TEXT("Texture cached at: %s"), *FilePath);
 			}
 			else
 			{
@@ -152,106 +179,109 @@ int32 AHuntersGameWorldManager::LatitudeToTileY(float Lat, int32 Zoom)
 	return (1.0 - log(tan(LatRad) + 1.0 / cos(LatRad)) / PI) / 2.0 * pow(2.0, Zoom);
 }
 
-//
-//
-// void AHuntersGameWorldManager::SetPlayerCoords(float Lat, float Lon)
-// {
-// 	PlayerCoords = {Lat, Lon};
-// }
-//
-// void AHuntersGameWorldManager::UpdateMap()
-// {
-// 	if (!PlayerActor)
-// 	{
-// 		UE_LOG(LogTemp, Log, TEXT("Invalid Player Actor"));
-// 		return;
-// 	}
-// 	
-// 	FVector PlayerLocation = PlayerActor->GetActorLocation();  // Get player's position in world space
-// 	float PlayerLat, PlayerLon;
-// 	ConvertWorldToGPS(PlayerLocation, PlayerLat, PlayerLon);
-// 	
-// 	int PlayerTileX = LongitudeToTileX(PlayerCoords.Longitude, Zoom);
-// 	int PlayerTileY = LatitudeToTileY(PlayerCoords.Latitude, Zoom);
-//
-// 	UE_LOG(LogTemp, Log, TEXT("Player at Tile (%d, %d)"), PlayerTileX, PlayerTileY);
-//
-// 	for (int dx = -LoadRadius; dx <= LoadRadius; dx++)
-// 	{
-// 		for (int dy = -LoadRadius; dy <= LoadRadius; dy++)
-// 		{
-// 			int NewTileX = PlayerTileX + dx;
-// 			int NewTileY = PlayerTileY + dy;
-// 			FIntPoint NewTilePos(NewTileX, NewTileY);
-//
-// 			if (!LoadedTiles.Contains(NewTilePos))
-// 			{
-// 				LoadTile(NewTileX, NewTileY);
-// 			}
-// 		}
-// 	}
-//
-// 	TArray<FIntPoint> KeysToRemove;
-// 	for (auto& Tile : LoadedTiles)
-// 	{
-// 		if (!LoadedTiles.Contains(Tile.Key))
-// 		{
-// 			KeysToRemove.Add(Tile.Key);
-// 		}
-// 	}
-//
-// 	for (FIntPoint TileToRemove : KeysToRemove)
-// 	{
-// 		UnloadTiles(TileToRemove.X, TileToRemove.Y);
-// 	}
-// 	
-// 	// for (int dx = -LoadRadius; dx <= LoadRadius; dx++)
-// 	// {
-// 	// 	for (int dy = -LoadRadius; dy <= LoadRadius; dy++)
-// 	// 	{
-// 	// 		int NewTileX = PlayerTileX + dx;
-// 	// 		int NewTileY = PlayerTileY + dy;
-// 	//
-// 	// 		if (!LoadedTiles.Contains(FIntPoint(NewTileX, NewTileY)))
-// 	// 		{
-// 	// 			UE_LOG(LogTemp, Warning, TEXT("Tile (%d, %d) not found in LoadedTiles. Loading..."), NewTileX, NewTileY);
-// 	// 			LoadTile(NewTileX, NewTileY);
-// 	// 		}
-// 	// 	}
-// 	// }
-// 	
-// 	// for (int32 DirectionX = -LoadRadius; DirectionX <= LoadRadius; DirectionX++)
-// 	// {
-// 	// 	for (int32 DirectionY = -LoadRadius; DirectionY <= LoadRadius; DirectionY++)
-// 	// 	{
-// 	// 		int32 NewTileX = GetPlayerTile().TileX + DirectionX;
-// 	// 		int32 NewTileY = GetPlayerTile().TileY + DirectionY;
-// 	//
-// 	// 		if (!LoadedTiles.Contains(FIntPoint(NewTileX, NewTileY)))
-// 	// 		{
-// 	// 			LoadTile(NewTileX, NewTileY);
-// 	// 		}
-// 	// 	}
-// 	// }
-// 	//
-// 	// TArray<FIntPoint> TilesToRemove;
-// 	// for (const auto& Tile : LoadedTiles)
-// 	// {
-// 	// 	int TileX = Tile.Key.X;
-// 	// 	int TileY = Tile.Key.Y;
-// 	//
-// 	// 	if (FMath::Abs(TileX - PlayerTileLocation.TileX) > LoadRadius || FMath::Abs(TileY - PlayerTileLocation.TileY) > LoadRadius)
-// 	// 	{
-// 	// 		TilesToRemove.Add(Tile.Key);
-// 	// 	}
-// 	// }
-// 	//
-// 	// for (FIntPoint TileKey : TilesToRemove)
-// 	// {
-// 	// 	UnloadTiles(TileKey.X, TileKey.Y);
-// 	// }
-// }
-//
+void AHuntersGameWorldManager::SetPlayerCoords(float Lat, float Lon)
+{
+	PlayerCoords = {Lat, Lon};
+}
+
+void AHuntersGameWorldManager::UpdateMap()
+{
+	if (!PlayerActor)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Invalid Player Actor"));
+		return;
+	}
+	
+	// 	FVector PlayerLocation = PlayerActor->GetActorLocation();  // Get player's position in world space
+	// 	float PlayerLat, PlayerLon;
+	// 	ConvertWorldToGPS(PlayerLocation, PlayerLat, PlayerLon);
+
+	int PlayerTileX = LongitudeToTileX(PlayerCoords.Longitude, Zoom);
+	int PlayerTileY = LatitudeToTileY(PlayerCoords.Latitude, Zoom);
+
+	UE_LOG(LogTemp, Log, TEXT("Player at Tile (%d, %d)"), PlayerTileX, PlayerTileY);
+
+	GenerateGrid();
+
+	TArray<FIntPoint> TilesToRemove;
+	for (const auto& Tile : LoadedTiles)
+	{
+		int TileX = Tile.Key.X;
+		int TileY = Tile.Key.Y;
+		
+		if (FMath::Abs(TileX - PlayerTileLocation.TileX) > LoadRadius || FMath::Abs(TileY - PlayerTileLocation.TileY) > LoadRadius)
+		{
+			TilesToRemove.Add(Tile.Key);
+		}
+	}
+		
+	for (FIntPoint TileKey : TilesToRemove)
+	{
+		UnloadTiles(TileKey.X, TileKey.Y);
+	}
+
+	// 	TArray<FIntPoint> KeysToRemove;
+	// 	for (auto& Tile : LoadedTiles)
+	// 	{
+	// 		if (!LoadedTiles.Contains(Tile.Key))
+	// 		{
+	// 			KeysToRemove.Add(Tile.Key);
+	// 		}
+	// 	}
+	//
+	// 	for (FIntPoint TileToRemove : KeysToRemove)
+	// 	{
+	// 		UnloadTiles(TileToRemove.X, TileToRemove.Y);
+	// 	}
+	// 	
+	// 	// for (int dx = -LoadRadius; dx <= LoadRadius; dx++)
+	// 	// {
+	// 	// 	for (int dy = -LoadRadius; dy <= LoadRadius; dy++)
+	// 	// 	{
+	// 	// 		int NewTileX = PlayerTileX + dx;
+	// 	// 		int NewTileY = PlayerTileY + dy;
+	// 	//
+	// 	// 		if (!LoadedTiles.Contains(FIntPoint(NewTileX, NewTileY)))
+	// 	// 		{
+	// 	// 			UE_LOG(LogTemp, Warning, TEXT("Tile (%d, %d) not found in LoadedTiles. Loading..."), NewTileX, NewTileY);
+	// 	// 			LoadTile(NewTileX, NewTileY);
+	// 	// 		}
+	// 	// 	}
+	// 	// }
+	// 	
+	// 	// for (int32 DirectionX = -LoadRadius; DirectionX <= LoadRadius; DirectionX++)
+	// 	// {
+	// 	// 	for (int32 DirectionY = -LoadRadius; DirectionY <= LoadRadius; DirectionY++)
+	// 	// 	{
+	// 	// 		int32 NewTileX = GetPlayerTile().TileX + DirectionX;
+	// 	// 		int32 NewTileY = GetPlayerTile().TileY + DirectionY;
+	// 	//
+	// 	// 		if (!LoadedTiles.Contains(FIntPoint(NewTileX, NewTileY)))
+	// 	// 		{
+	// 	// 			LoadTile(NewTileX, NewTileY);
+	// 	// 		}
+	// 	// 	}
+	// 	// }
+	// 	//
+	// 	// TArray<FIntPoint> TilesToRemove;
+	// 	// for (const auto& Tile : LoadedTiles)
+	// 	// {
+	// 	// 	int TileX = Tile.Key.X;
+	// 	// 	int TileY = Tile.Key.Y;
+	// 	//
+	// 	// 	if (FMath::Abs(TileX - PlayerTileLocation.TileX) > LoadRadius || FMath::Abs(TileY - PlayerTileLocation.TileY) > LoadRadius)
+	// 	// 	{
+	// 	// 		TilesToRemove.Add(Tile.Key);
+	// 	// 	}
+	// 	// }
+	// 	//
+	// 	// for (FIntPoint TileKey : TilesToRemove)
+	// 	// {
+	// 	// 	UnloadTiles(TileKey.X, TileKey.Y);
+	// 	// }
+	
+}
+
 // void AHuntersGameWorldManager::LoadTile(int32 TileX, int32 TileY)
 // {
 // 	FIntPoint Index = FIntPoint(TileX, TileY);
@@ -294,29 +324,29 @@ int32 AHuntersGameWorldManager::LatitudeToTileY(float Lat, int32 Zoom)
 //
 // 	DownloadTileImage(TileX, TileY);
 // }
-//
-// void AHuntersGameWorldManager::UnloadTiles(int32 TileX, int32 TileY)
-// {
-// 	FIntPoint TileKey{TileX, TileY};
-//
-// 	if (LoadedTiles.Contains(TileKey))
-// 	{
-// 		UStaticMeshComponent* TileMesh = LoadedTiles[TileKey];
-// 		if (TileMesh)
-// 		{
-// 			TileMesh->DestroyComponent();  // Removes from scene
-// 		}
-//
-// 		LoadedTiles.Remove(TileKey);
-// 		UE_LOG(LogTemp, Log, TEXT("Unloaded tile (%d, %d)"), TileKey.X, TileKey.Y);
-// 	}
-// 	
-// 	// if (UStaticMeshComponent** MeshComponent = LoadedTiles.Find(FIntPoint(TileX, TileY)))
-// 	// {
-// 	// 	(*MeshComponent)->DestroyComponent();
-// 	// 	LoadedTiles.Remove(FIntPoint(TileX, TileY));
-// 	// }
-// }
+
+void AHuntersGameWorldManager::UnloadTiles(int32 TileX, int32 TileY)
+{
+	FIntPoint TileKey{TileX, TileY};
+
+	if (LoadedTiles.Contains(TileKey))
+	{
+		UStaticMeshComponent* TileMesh = LoadedTiles[TileKey];
+		if (TileMesh)
+		{
+			TileMesh->DestroyComponent();  // Removes from scene
+		}
+
+		LoadedTiles.Remove(TileKey);
+		UE_LOG(LogTemp, Log, TEXT("Unloaded tile (%d, %d)"), TileKey.X, TileKey.Y);
+	}
+	
+	// if (UStaticMeshComponent** MeshComponent = LoadedTiles.Find(FIntPoint(TileX, TileY)))
+	// {
+	// 	(*MeshComponent)->DestroyComponent();
+	// 	LoadedTiles.Remove(FIntPoint(TileX, TileY));
+	// }
+}
 //
 // void AHuntersGameWorldManager::DownloadTileImage(int32 TileX, int32 TileY)
 // {
