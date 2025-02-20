@@ -20,6 +20,8 @@ void AHuntersGameWorldManager::BeginPlay()
 		PlayerActor = PC->GetPawn();
 	}
 
+	RegenerateGrid();
+
 	GetWorld()->GetTimerManager().SetTimer(UpdateMapTimerHandle, [this]
 	{
 		UpdateMap();		
@@ -68,10 +70,13 @@ void AHuntersGameWorldManager::GenerateGrid()
 				TileMesh->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
 
 				FVector TilePosition = GetActorLocation() + FVector(x * TileSize, y * TileSize, 0.0f);
+
+				const FVector2D TileCoords = TileXYToLatLon(TileIndex.X, TileIndex.Y, Zoom);
+				const FVector TileUnrealLocation = GeoCoordsToUnrealWorld(TileCoords);
 			
-				TileMesh->SetWorldLocation(TilePosition);
+				TileMesh->SetWorldLocation(TileUnrealLocation);
 			
-				TileMesh->SetWorldScale3D(FVector{25.0f, 25.0f, 1.0f});
+				//TileMesh->SetWorldScale3D(FVector{25.0f, 25.0f, 1.0f});
 				TileMesh->RegisterComponent();
 
 				int NewTileX = PlayerTileX + x;
@@ -173,15 +178,48 @@ int32 AHuntersGameWorldManager::LongitudeToTileX(float Lon, int32 Zoom)
 	return (Lon + 180.0) / 360.0 * pow(2.0, Zoom);
 }
 
-int32 AHuntersGameWorldManager::LatitudeToTileY(float Lat, int32 Zoom)
+int32 AHuntersGameWorldManager::LatitudeToTileY(float Lat, int32 ZoomValue)
 {
 	float LatRad = Lat * PI / 180.0;
-	return (1.0 - log(tan(LatRad) + 1.0 / cos(LatRad)) / PI) / 2.0 * pow(2.0, Zoom);
+	return (1.0 - log(tan(LatRad) + 1.0 / cos(LatRad)) / PI) / 2.0 * pow(2.0, ZoomValue);
+}
+
+FVector2D AHuntersGameWorldManager::TileXYToLatLon(int32 TileX, int32 TileY, int32 ZoomValue)
+{
+	double n = pow(2.0, Zoom);
+
+	double lon = (TileX / n) * 360.0 - 180.0;
+	double lat_rad = atan(sinh(PI * (1 - 2 * (TileY / n))));
+	double lat = lat_rad * (180.0 / PI);
+
+	return FVector2D(lon, lat);
 }
 
 void AHuntersGameWorldManager::SetPlayerCoords(float Lat, float Lon)
 {
 	PlayerCoords = {Lat, Lon};
+}
+
+FVector AHuntersGameWorldManager::GeoCoordsToUnrealWorld(FVector2D Coords) const
+{
+	const FVector OriginUnrealLocation{0,0,0};
+
+	const FVector2D OriginGeoCoords{0.0, 0.0};
+
+	int32 TargetTileX = LongitudeToTileX(Coords.X, Zoom);
+	int32 TargetTileY = LatitudeToTileY(Coords.Y, Zoom);
+
+	int32 OriginTileX = LongitudeToTileX(OriginGeoCoords.X, Zoom);
+	int32 OriginTileY = LatitudeToTileY(OriginGeoCoords.Y, Zoom);
+
+	// Convert tile difference to Unreal world offset
+	FVector UnrealOffset = FVector(
+		(TargetTileX - OriginTileX) * TileSize,
+		(TargetTileY - OriginTileY) * TileSize,
+		0.0f // Assuming a flat world
+	);
+
+	return OriginUnrealLocation + UnrealOffset;
 }
 
 void AHuntersGameWorldManager::UpdateMap()
@@ -209,16 +247,20 @@ void AHuntersGameWorldManager::UpdateMap()
 		int TileX = Tile.Key.X;
 		int TileY = Tile.Key.Y;
 		
-		if (FMath::Abs(TileX - PlayerTileLocation.TileX) > LoadRadius || FMath::Abs(TileY - PlayerTileLocation.TileY) > LoadRadius)
+		if (FMath::Abs(TileX - PlayerTileX) > LoadRadius || FMath::Abs(TileY - PlayerTileY) > LoadRadius)
 		{
 			TilesToRemove.Add(Tile.Key);
 		}
 	}
+
+	FVector UnrealLocation = GeoCoordsToUnrealWorld(FVector2D{PlayerCoords.Longitude, PlayerCoords.Latitude});
+	UE_LOG(LogTemp, Log, TEXT("Player at Unreal Location (%f, %f)"), UnrealLocation.X, UnrealLocation.Y);
+	PlayerActor->SetActorLocation(FVector{UnrealLocation.X, UnrealLocation.Y, UnrealLocation.Z + 100.0f});
 		
 	for (FIntPoint TileKey : TilesToRemove)
 	{
 		UnloadTiles(TileKey.X, TileKey.Y);
-	}
+	}	
 
 	// 	TArray<FIntPoint> KeysToRemove;
 	// 	for (auto& Tile : LoadedTiles)

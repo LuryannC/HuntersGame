@@ -100,6 +100,12 @@ private:
 	//
 	// void OnImageDownloaded(int32 TileX, int32 TileY, TArray<uint8> ImageData);
 
+	UFUNCTION(BlueprintPure)
+	FVector GeoCoordsToUnrealWorld(FVector2D Coords) const;
+
+	UFUNCTION(BlueprintPure)
+	FVector2D TileXYToLatLon(int32 TileX, int32 TileY, int32 ZoomValue);
+
 protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
