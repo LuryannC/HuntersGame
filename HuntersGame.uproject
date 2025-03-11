@@ -1,13 +1,16 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "5.5",
+	"EngineAssociation": "",
 	"Category": "",
 	"Description": "",
 	"Modules": [
 		{
 			"Name": "HuntersGame",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Engine"
+			]
 		}
 	],
 	"Plugins": [
@@ -29,10 +32,29 @@
 		{
 			"Name": "LocationServicesAndroidImpl",
 			"Enabled": true
+		},
+		{
+			"Name": "XRBase",
+			"Enabled": true
+		},
+		{
+			"Name": "GeoLocation",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/756ffbd1a6054f9493ad749cd65aced1",
+			"Plugins": [
+				{
+					"Name": "AndroidPermission",
+					"Enabled": true
+				}
+			],
+			"Android": {
+				"AdditionalDependencies": [
+					"com.google.android.gms:play-services-location:21.0.0"
+				]
+			}
 		}
 	],
 	"TargetPlatforms": [
-		"Android",
-		"Windows"
+		"Android"
 	]
 }

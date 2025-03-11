@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--GeoLocation plugin additions-->
+<root xmlns:android="http://schemas.android.com/apk/res/android">
+	<init>
+		<log text="Hunters Game Module Init"/>
+    </init>
+
+	<baseBuildGradleAdditions> 
+	<insert>
+		allprojects {
+			repositories {
+				google()
+				mavenCentral()
+				maven {
+					url 'https://maven.google.com/'
+				}
+			}
+		}
+	</insert>
+	</baseBuildGradleAdditions>
+
+    <buildGradleAdditions> 
+	<insert>
+		dependencies {
+			implementation 'com.google.android.gms:play-services-location:21.0.0'
+		}
+	</insert>
+	</buildGradleAdditions>
+
+	<!-- optional updates applied to AndroidManifest.xml -->
+	<androidManifestUpdates>
+		<addPermission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+		<insert>
+			<uses-feature android:name="android.hardware.location.gps" />
+		</insert>
+	</androidManifestUpdates>
+</root>

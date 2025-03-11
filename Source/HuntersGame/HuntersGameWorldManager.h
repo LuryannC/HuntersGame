@@ -1,7 +1,10 @@
 #pragma once
+#include "LocationServicesBPLibrary.h"
 
 
 #include "HuntersGameWorldManager.generated.h"
+
+class AHuntersGamePlaneActor;
 
 USTRUCT(Blueprintable, BlueprintType)
 struct FPlayerCoords
@@ -63,7 +66,17 @@ public:
 	UFUNCTION(CallInEditor, Category = "Grid")
 	void RegenerateGrid();
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bHasPreviousLocation = false;
+
+	UFUNCTION(BlueprintPure)
+	FVector2D TileToLatLon(int32 TileX, int32 TileY);
+
+	UFUNCTION(BlueprintPure)
+	FVector TileToUnrealPosition(int32 TileX, int32 TileY);
+	
 private:
+	UFUNCTION(CallInEditor, Category = "Grid")
 	void ClearGrid();
 	void GenerateGrid();
 	FString GetOSMTextureURL(int32 x, int32 y, int32 zoom);
@@ -78,7 +91,7 @@ private:
 	UFUNCTION(BlueprintCallable)
 	void SetPlayerCoords(float Lat, float Lon);
 	
-	UFUNCTION(BlueprintCallable, CallInEditor)
+	UFUNCTION(CallInEditor, Category = "Grid")
 	void UpdateMap();
 	
 	// UFUNCTION(BlueprintCallable)
@@ -100,19 +113,25 @@ private:
 	//
 	// void OnImageDownloaded(int32 TileX, int32 TileY, TArray<uint8> ImageData);
 
+	FVector ConvertLatLonToUECoords(double Latitude, double Longitude, double InOriginLatitude, double InOriginLongitude);
+	
 	UFUNCTION(BlueprintPure)
 	FVector GeoCoordsToUnrealWorld(FVector2D Coords) const;
+	
+	FVector TileXYToUnreal(int32 TileX, int32 TileY);
 
-	UFUNCTION(BlueprintPure)
-	FVector2D TileXYToLatLon(int32 TileX, int32 TileY, int32 ZoomValue);
+	UFUNCTION(BlueprintCallable)
+	float CalculateDistance(float InitialLat, float InitialLon, float FinalLat, float FinalLon);
 
+	UFUNCTION(BlueprintCallable)
+	float GetGPSVelocity();
 protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int32 Zoom = 16;
+	int32 Zoom = 18;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int32 LoadRadius = 2;
+	int32 LoadRadius = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 TileSize = 256;
@@ -136,4 +155,13 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TObjectPtr<UMaterial> BaseMaterial;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
+	TSubclassOf<AHuntersGamePlaneActor> PlaneActorClass;
+
+	UPROPERTY(BlueprintReadWrite)
+	FLocationServicesData PreviousLocation;
+	
+	double OriginLatitude;
+	double OriginLongitude;
 };

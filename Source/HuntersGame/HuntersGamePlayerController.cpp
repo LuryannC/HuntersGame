@@ -1,15 +1,12 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "HuntersGamePlayerController.h"
+
+#include "GeoLocationComponent.h"
 #include "GameFramework/Pawn.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
-#include "NiagaraSystem.h"
 #include "NiagaraFunctionLibrary.h"
-#include "HuntersGameCharacter.h"
 #include "Engine/World.h"
-#include "EnhancedInputComponent.h"
-#include "InputActionValue.h"
-#include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
@@ -20,6 +17,8 @@ AHuntersGamePlayerController::AHuntersGamePlayerController()
 	DefaultMouseCursor = EMouseCursor::Default;
 	CachedDestination = FVector::ZeroVector;
 	FollowTime = 0.f;
+
+	GeoLocation = CreateDefaultSubobject<UGeoLocationComponent>(TEXT("GeoLocation"));
 }
 
 void AHuntersGamePlayerController::BeginPlay()

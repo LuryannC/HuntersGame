@@ -14,6 +14,8 @@ class AHuntersGameCharacter : public ACharacter
 public:
 	AHuntersGameCharacter();
 
+	virtual void BeginPlay() override;
+
 	// Called every frame.
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -22,6 +24,8 @@ public:
 	/** Returns CameraBoom subobject **/
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 
+	UFUNCTION(BlueprintCallable)
+	FRotator GetDeviceOrientation();
 private:
 	/** Top down camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))

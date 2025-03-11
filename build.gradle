@@ -1,0 +1,11 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+dependencies {
+    // Add Google Play Services dependency
+    implementation 'com.google.android.gms:play-services-location:17.0.0'
+}

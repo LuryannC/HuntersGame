@@ -11,5 +11,6 @@ public class HuntersGameTarget : TargetRules
 		DefaultBuildSettings = BuildSettingsVersion.V5;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_5;
 		ExtraModuleNames.Add("HuntersGame");
+		ExtraModuleNames.Add("GeoLocation");
 	}
 }

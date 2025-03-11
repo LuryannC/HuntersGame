@@ -7,6 +7,7 @@
 #include "GameFramework/PlayerController.h"
 #include "HuntersGamePlayerController.generated.h"
 
+class UGeoLocationComponent;
 /** Forward declaration to improve compiling times */
 class UNiagaraSystem;
 class UInputMappingContext;
@@ -42,6 +43,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=Input, meta=(AllowPrivateAccess = "true"))
 	UInputAction* SetDestinationTouchAction;
 
+
 protected:
 	/** True if the controlled character should navigate to the mouse cursor. */
 	uint32 bMoveToMouseCursor : 1;
@@ -57,6 +59,9 @@ protected:
 	void OnSetDestinationReleased();
 	void OnTouchTriggered();
 	void OnTouchReleased();
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
+	TObjectPtr<UGeoLocationComponent> GeoLocation;
 
 private:
 	FVector CachedDestination;

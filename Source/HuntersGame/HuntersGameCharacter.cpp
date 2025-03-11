@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "HuntersGameCharacter.h"
+
+#include "HeadMountedDisplayFunctionLibrary.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Camera/CameraComponent.h"
 #include "Components/DecalComponent.h"
@@ -42,10 +44,42 @@ AHuntersGameCharacter::AHuntersGameCharacter()
 
 	// Activate ticking in order to update the cursor every frame.
 	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.bStartWithTickEnabled = true;
+	PrimaryActorTick.bStartWithTickEnabled = true;	
+}
+
+void AHuntersGameCharacter::BeginPlay()
+{
+	Super::BeginPlay();	
+	UHeadMountedDisplayFunctionLibrary::EnableHMD(true);
 }
 
 void AHuntersGameCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+	
+	// Get device rotation
+	FRotator DeviceRotation = GetDeviceOrientation();
+    
+	// Apply rotation to character (Only Yaw is usually needed)
+	FRotator NewRotation = FRotator(0.0f, DeviceRotation.Yaw, 0.0f);
+    
+	SetActorRotation(NewRotation);
+}
+
+FRotator AHuntersGameCharacter::GetDeviceOrientation()
+{
+	FRotator DeviceRotation;
+	FVector DevicePosition;
+
+	if (UHeadMountedDisplayFunctionLibrary::IsHeadMountedDisplayEnabled())
+	{
+		UHeadMountedDisplayFunctionLibrary::GetOrientationAndPosition(DeviceRotation, DevicePosition);
+		// GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Cyan, FString::Printf(TEXT("Device Rotation: Pitch: %f, Roll: %f, Yaw: %f"), DeviceRotation.Pitch, DeviceRotation.Roll, DeviceRotation.Yaw));
+	}
+	else
+	{
+		// GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Cyan, FString::Printf(TEXT("HeadMountedDisplay Disabled")));
+	}
+
+	return DeviceRotation;
 }
