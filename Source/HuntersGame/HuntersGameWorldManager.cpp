@@ -8,6 +8,8 @@
 #include "Interfaces/IHttpResponse.h"
 #include "Kismet/GameplayStatics.h"
 
+DEFINE_LOG_CATEGORY(HuntersGameWorldManagerLog)
+
 AHuntersGameWorldManager::AHuntersGameWorldManager()
 {
 	PlayerCoords = {-27.152f,-48.918f};
@@ -22,14 +24,15 @@ void AHuntersGameWorldManager::BeginPlay()
 	{
 		PlayerActor = PC->GetPawn();
 		PlayerActor->SetActorLocation(FVector::Zero());
+		UE_LOG(HuntersGameWorldManagerLog, Log, TEXT("BeginPlay() - Player found and assigned"));
 	}
 	
+	GetWorld()->GetTimerManager().SetTimer(UpdateMapTimerHandle, [this]
+	{
+		UpdateMap();		
+	}, UpdateFrequency, true);
+	
 	RegenerateGrid();
-
-	// GetWorld()->GetTimerManager().SetTimer(UpdateMapTimerHandle, [this]
-	// {
-	// 	UpdateMap();		
-	// }, UpdateFrequency, true);
 }
 
 
@@ -38,6 +41,7 @@ void AHuntersGameWorldManager::RegenerateGrid()
 
 	OriginLongitude = PlayerCoords.Longitude;
 	OriginLatitude = PlayerCoords.Latitude;
+	UE_LOG(HuntersGameWorldManagerLog, Log, TEXT("RegenerateGrid() - Regenerate grid with origin lon: %f | Lat: %f "), OriginLongitude, OriginLatitude);
 	
 	ClearGrid();
 	GenerateGrid();
@@ -67,17 +71,17 @@ void AHuntersGameWorldManager::GenerateGrid()
 		for (int32 y = -LoadRadius; y <= LoadRadius; ++y)
 		{
 			FIntPoint TileIndex{ PlayerTileX + x, PlayerTileY + y };
+			UE_LOG(HuntersGameWorldManagerLog, Log, TEXT("GenerateGrid() - Tile Index: %s"), *TileIndex.ToString());
+			UE_LOG(HuntersGameWorldManagerLog, Log, TEXT("GenerateGrid() - Player tile - X: %i | Y: %i"), PlayerTileX, PlayerTileY);
 
 			if (!LoadedTiles.Contains(TileIndex))
 			{
-				// UStaticMeshComponent* TileMesh = NewObject<UStaticMeshComponent>(this);
-				// TileMesh->SetStaticMesh(PlaneMesh);
-				// TileMesh->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
-
 				int32 Index = (y + LoadRadius) * (2 * LoadRadius + 1) + (x + LoadRadius);
 				FString TileName = FString::Printf(TEXT("Tile-%i"), Index);
+				UE_LOG(HuntersGameWorldManagerLog, Log, TEXT("GenerateGrid() - Tile Name: %s"), *TileName);
+				
 				FActorSpawnParameters ActorSpawnParameters{};
-				ActorSpawnParameters.Name = *TileName;
+				// ActorSpawnParameters.Name = *TileName;
 				AActor* PlaneActorInstanced = GetWorld()->SpawnActor<AHuntersGamePlaneActor>(
 					PlaneActorClass.Get(),
 					FVector::ZeroVector,
@@ -85,6 +89,7 @@ void AHuntersGameWorldManager::GenerateGrid()
 					ActorSpawnParameters);
 
 				AHuntersGamePlaneActor* PlaneActor = Cast<AHuntersGamePlaneActor>(PlaneActorInstanced);
+				PlaneActor->SetActorEnableCollision(false);
 				
 				if (!PlaneActorInstanced || !PlaneActor) return;
 				
@@ -92,59 +97,21 @@ void AHuntersGameWorldManager::GenerateGrid()
 				
 				// Convert tile position to Unreal coordinates
 				FVector2D TileCoords = TileToLatLon(TileIndex.X, TileIndex.Y);
-				FVector TilePosition = ConvertLatLonToUECoords(TileCoords.Y, TileCoords.X, OriginLatitude, OriginLongitude);
+				UE_LOG(HuntersGameWorldManagerLog, Log, TEXT("GenerateGrid() - Tile Coords: X:%f | Y:%f "), TileCoords.X, TileCoords.Y);
+				
+				FVector TilePosition = TileToUnrealPosition(TileIndex.X, TileIndex.Y, PlayerTileX, PlayerTileY);
+				UE_LOG(HuntersGameWorldManagerLog, Log, TEXT("GenerateGrid() - Tile Position: X:%f | Y:%f "), TilePosition.X, TilePosition.Y);
+				PlaneActor->SetActorLocation(TilePosition);
 
 				// Load OSM tile texture
 				FString TileURL = GetOSMTextureURL(TileIndex.X, TileIndex.Y, Zoom);
+				UE_LOG(HuntersGameWorldManagerLog, Log, TEXT("GenerateGrid() - Tile URL: %s "), *TileURL);
 				DownloadAndApplyTexture(PlaneActor->GetPlaneMesh(), TileURL);
 
 				LoadedTiles.Add(TileIndex, PlaneActor->GetPlaneMesh());
 			}
 		}
 	}
-	
-	// UStaticMesh* PlaneMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Plane.Plane"));
-	//
-	// if (!PlaneMesh) return;
-	//
-	// int PlayerTileX = LongitudeToTileX(PlayerCoords.Longitude, Zoom);
-	// int PlayerTileY = LatitudeToTileY(PlayerCoords.Latitude, Zoom);
-	//
-	// for (int32 x = -LoadRadius; x <= LoadRadius; ++x)
-	// {
-	// 	for (int32 y = -LoadRadius; y <= LoadRadius; ++y)
-	// 	{
-	// 		FIntPoint TileIndex{PlayerTileX + x,  PlayerTileY + y};
-	// 		
-	// 		if (!LoadedTiles.Contains(TileIndex))
-	// 		{				
-	// 			UStaticMeshComponent* TileMesh = NewObject<UStaticMeshComponent>(this);
-	// 			TileMesh->SetStaticMesh(PlaneMesh);
-	// 			TileMesh->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
-	//
-	// 			FVector TilePosition = GetActorLocation() + FVector(x * TileSize, y * TileSize, 0.0f);
-	//
-	// 			const FVector2D TileCoords = TileXYToLatLon(TileIndex.X, TileIndex.Y, Zoom);
-	// 			const FVector TileUnrealLocation = GeoCoordsToUnrealWorld(TileCoords);
-	// 		
-	// 			TileMesh->SetWorldLocation(TilePosition);
-	// 		
-	// 			//TileMesh->SetWorldScale3D(FVector{25.0f, 25.0f, 1.0f});
-	// 			TileMesh->RegisterComponent();
-	//
-	// 			int NewTileX = PlayerTileX + x;
-	// 			int NewTileY = PlayerTileY + y;
-	// 		
-	// 			FString TileURL = GetOSMTextureURL(NewTileX, NewTileY, Zoom);
-	// 			DownloadAndApplyTexture(TileMesh, TileURL);
-	//
-	// 			LoadedTiles.Add(TileIndex, TileMesh);
-	// 		}
-	// 	}
-	// }
-	//
-	// const FVector NewLocation = ConvertLatLonToUECoords(PlayerCoords.Latitude, PlayerCoords.Longitude, OriginLongitude, OriginLatitude);
-	// SetActorLocation(NewLocation);
 }
 
 FString AHuntersGameWorldManager::GetOSMTextureURL(int32 x, int32 y, int32 zoom)
@@ -157,30 +124,30 @@ void AHuntersGameWorldManager::DownloadAndApplyTexture(UStaticMeshComponent* Til
 {
 	if (!TileMesh)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("TileMesh is NULL!"));
+		UE_LOG(HuntersGameWorldManagerLog, Warning, TEXT("TileMesh is NULL!"));
 		return;
 	}
 
 	// Check if the mesh has a material, if not create one dynamically
 	if (TileMesh->GetNumMaterials() == 0 || !BaseMaterial)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("TileMesh has no material slots or BaseMaterial is missing!"));
+		UE_LOG(HuntersGameWorldManagerLog, Warning, TEXT("TileMesh has no material slots or BaseMaterial is missing!"));
 
 		if (!BaseMaterial)
 		{
-			UE_LOG(LogTemp, Error, TEXT("BaseMaterial is NULL! Please assign it in the Editor."));
+			UE_LOG(HuntersGameWorldManagerLog, Error, TEXT("BaseMaterial is NULL! Please assign it in the Editor."));
 			return;
 		}
 
 		TileMesh->SetMaterial(0, BaseMaterial);
-		UE_LOG(LogTemp, Warning, TEXT("BaseMaterial assigned to TileMesh."));
+		UE_LOG(HuntersGameWorldManagerLog, Warning, TEXT("BaseMaterial assigned to TileMesh."));
 	}
 
 	// Now create a Dynamic Material Instance from the existing material
 	UMaterialInstanceDynamic* MaterialInstance = TileMesh->CreateAndSetMaterialInstanceDynamicFromMaterial(0, BaseMaterial);
 	if (!MaterialInstance)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to create dynamic material instance."));
+		UE_LOG(HuntersGameWorldManagerLog, Error, TEXT("Failed to create dynamic material instance."));
 		return;
 	}
 	
@@ -191,7 +158,7 @@ void AHuntersGameWorldManager::DownloadAndApplyTexture(UStaticMeshComponent* Til
 	// Check if file already exists
 	if (FPaths::FileExists(FilePath))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Loading texture from cache: %s"), *FilePath);
+		UE_LOG(HuntersGameWorldManagerLog, Warning, TEXT("Loading texture from cache: %s"), *FilePath);
 		UTexture2D* CachedTexture = FImageUtils::ImportFileAsTexture2D(FilePath);
 		if (CachedTexture)
 		{
@@ -211,15 +178,15 @@ void AHuntersGameWorldManager::DownloadAndApplyTexture(UStaticMeshComponent* Til
 			if (DownloadedTexture)
 			{
 				MaterialInstance->SetTextureParameterValue("BaseTexture", DownloadedTexture);
-				UE_LOG(LogTemp, Warning, TEXT("Texture applied successfully."));
+				UE_LOG(HuntersGameWorldManagerLog, Warning, TEXT("Texture applied successfully."));
 
 				// Save the downloaded image for future use
 				FFileHelper::SaveArrayToFile(ImageData, *FilePath);
-				UE_LOG(LogTemp, Warning, TEXT("Texture cached at: %s"), *FilePath);
+				UE_LOG(HuntersGameWorldManagerLog, Warning, TEXT("Texture cached at: %s"), *FilePath);
 			}
 			else
 			{
-				UE_LOG(LogTemp, Error, TEXT("Failed to create texture from downloaded data."));
+				UE_LOG(HuntersGameWorldManagerLog, Error, TEXT("Failed to create texture from downloaded data."));
 			}
 		}
 	});
@@ -278,61 +245,55 @@ FVector AHuntersGameWorldManager::GeoCoordsToUnrealWorld(FVector2D Coords) const
 
 void AHuntersGameWorldManager::UpdateMap()
 {
-	// if (!PlayerActor)
-	// {
-	// 	UE_LOG(LogTemp, Log, TEXT("Invalid Player Actor"));
-	// 	return;
-	// }
 	
-	int PlayerTileX = LongitudeToTileX(PlayerCoords.Longitude, Zoom);
-	int PlayerTileY = LatitudeToTileY(PlayerCoords.Latitude, Zoom);
+	int NewPlayerTileX = LongitudeToTileX(PlayerCoords.Longitude, Zoom);
+	int NewPlayerTileY = LatitudeToTileY(PlayerCoords.Latitude, Zoom);
 
-	FVector TargetLocation = ConvertLatLonToUECoords(PlayerCoords.Latitude, PlayerCoords.Longitude, OriginLongitude, OriginLatitude);
+	static int LastPlayerTileX = NewPlayerTileX;
+	static int LastPlayerTileY = NewPlayerTileY;
 	
-	static FVector LastLocation = TargetLocation; // Store last position
-	float DistanceMoved = FVector::Dist(LastLocation, TargetLocation);
-	
-	// Only regenerate grid if moved significantly (e.g., beyond half a tile)
-	if (DistanceMoved > TileSize / 2)
+	if (NewPlayerTileX != LastPlayerTileX || NewPlayerTileY != LastPlayerTileY)
 	{
-		LastLocation = TargetLocation;
-		RegenerateGrid(); // Load new tiles
+		LastPlayerTileX = NewPlayerTileX;
+		LastPlayerTileY = NewPlayerTileY;
+        
+		RegenerateGrid(); // Reload tiles around the new player position
 	}
 	
+	// Move tiles instead of the player
 	for (const auto& Tile : LoadedTiles)
 	{
 		if (Tile.Value)
 		{
-			FVector CurrentPosition = Tile.Value->GetComponentLocation();
-			const FVector SmoothedPosition = FMath::Lerp(CurrentPosition, CurrentPosition - TargetLocation, 0.1f); // Adjust smoothing factor as needed
-			Tile.Value->SetWorldLocation(SmoothedPosition);
+			int32 TileX = Tile.Key.X;
+			int32 TileY = Tile.Key.Y;
+			FVector NewTilePosition = TileToUnrealPosition(TileX, TileY, NewPlayerTileX, NewPlayerTileY);
+			Tile.Value->SetWorldLocation(NewTilePosition);
+			
 		}
 	}
 
-	// UE_LOG(LogTemp, Log, TEXT("Player at Tile (%d, %d)"), PlayerTileX, PlayerTileY);
+	// FVector TargetLocation = ConvertLatLonToUECoords(PlayerCoords.Latitude, PlayerCoords.Longitude, OriginLongitude, OriginLatitude);
 	//
-	// GenerateGrid();
+	// static FVector LastLocation = TargetLocation; // Store last position
+	// float DistanceMoved = FVector::Dist(LastLocation, TargetLocation);
 	//
-	// TArray<FIntPoint> TilesToRemove;
+	// // Only regenerate grid if moved significantly (e.g., beyond half a tile)
+	// if (DistanceMoved > TileSize / 2)
+	// {
+	// 	LastLocation = TargetLocation;
+	// 	RegenerateGrid(); // Load new tiles
+	// }
+	//
 	// for (const auto& Tile : LoadedTiles)
 	// {
-	// 	int TileX = Tile.Key.X;
-	// 	int TileY = Tile.Key.Y;
-	// 	
-	// 	if (FMath::Abs(TileX - PlayerTileX) > LoadRadius || FMath::Abs(TileY - PlayerTileY) > LoadRadius)
+	// 	if (Tile.Value)
 	// 	{
-	// 		TilesToRemove.Add(Tile.Key);
+	// 		FVector CurrentPosition = Tile.Value->GetComponentLocation();
+	// 		const FVector SmoothedPosition = FMath::Lerp(CurrentPosition, CurrentPosition - TargetLocation, 0.1f); // Adjust smoothing factor as needed
+	// 		Tile.Value->SetWorldLocation(SmoothedPosition);
 	// 	}
 	// }
-	
-	// FVector UnrealLocation = GeoCoordsToUnrealWorld(FVector2D{PlayerCoords.Longitude, PlayerCoords.Latitude});
-	// UE_LOG(LogTemp, Log, TEXT("Player at Unreal Location (%f, %f)"), UnrealLocation.X, UnrealLocation.Y);
-	//
-		
-	// for (FIntPoint TileKey : TilesToRemove)
-	// {
-	// 	UnloadTiles(TileKey.X, TileKey.Y);
-	// }	
 }
 
 void AHuntersGameWorldManager::UnloadTiles(int32 TileX, int32 TileY)
@@ -354,125 +315,23 @@ void AHuntersGameWorldManager::UnloadTiles(int32 TileX, int32 TileY)
 
 FVector AHuntersGameWorldManager::ConvertLatLonToUECoords(double Latitude, double Longitude, double InOriginLatitude,
 	double InOriginLongitude)
-{
-	// double EarthRadius = 6378137.0; // Earth's radius in meters
-	// double ScaleFactor = 10.0; // Convert real-world meters to Unreal Units (adjust as needed)
-	//
-	// // Convert latitude and longitude to meters relative to the origin point
-	// double DeltaLat = (Latitude - InOriginLatitude) * (PI / 180.0) * EarthRadius;
-	// double DeltaLon = (Longitude - InOriginLongitude) * (PI / 180.0) * EarthRadius * cos(InOriginLatitude * PI / 180.0);
-	//
-	// return FVector(DeltaLon, DeltaLat, 0.0) * ScaleFactor;
-	
-	const double EarthRadius = 6378137.0;
-	
+{	
+	const double EarthRadius = 6378137.0; // Meters
+
+	// Convert degrees to radians
 	double LatRad = FMath::DegreesToRadians(Latitude);
 	double LonRad = FMath::DegreesToRadians(Longitude);
-	double OriginLatRad = FMath::DegreesToRadians(InOriginLatitude);
-	double OriginLonRad = FMath::DegreesToRadians(InOriginLongitude);
-	
-	double X = EarthRadius * (LonRad - OriginLonRad);
-	double Y = EarthRadius * (LatRad - OriginLatRad);
-	
-	return FVector(X, Y, 0.0f);
-}
+	double OriginLatRad = FMath::DegreesToRadians(OriginLatitude);
+	double OriginLonRad = FMath::DegreesToRadians(OriginLongitude);
 
-//
-// void AHuntersGameWorldManager::DownloadTileImage(int32 TileX, int32 TileY)
-// {
-// 	FString TileURL = FString::Printf(TEXT("https://tile.openstreetmap.org/%d/%d/%d.png"), Zoom, TileX, TileY);
-//
-// 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> HttpRequest = FHttpModule::Get().CreateRequest();
-// 	HttpRequest->SetURL(TileURL);
-// 	HttpRequest->SetVerb("GET");
-//
-// 	// Capture TileX and TileY using a lambda function
-// 	HttpRequest->OnProcessRequestComplete().BindLambda([this, TileX, TileY](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
-// 	{
-// 		if (bWasSuccessful && Response.IsValid())
-// 		{
-// 			OnImageDownloaded(TileX, TileY, Response->GetContent());
-// 		}
-// 	});
-// 	
-// 	HttpRequest->ProcessRequest();
-// 	
-// }
-//
-// void AHuntersGameWorldManager::OnImageDownloaded(int32 TileX, int32 TileY, TArray<uint8> ImageData)
-// {
-// 	if (!LoadedTiles.Contains(FIntPoint(TileX, TileY)))
-// 	{
-// 		UE_LOG(LogTemp, Error, TEXT("Downloaded image for (%d, %d) but tile does not exist in LoadedTiles!"), TileX, TileY);
-// 		return;
-// 	}
-//
-// 	if (ImageData.Num() == 0)
-// 	{
-// 		UE_LOG(LogTemp, Error, TEXT("Failed to download image for tile (%d, %d), empty response!"), TileX, TileY);
-// 		return;
-// 	}
-//
-// 	UTexture2D* TileTexture = FImageUtils::ImportBufferAsTexture2D(ImageData);
-// 	if (!TileTexture)
-// 	{
-// 		UE_LOG(LogTemp, Error, TEXT("Failed to create texture from downloaded data for tile (%d, %d)"), TileX, TileY);
-// 		return;
-// 	}
-// 	
-// 	if(!LoadedTiles[FIntPoint(TileX, TileY)])
-// 	{
-// 		UE_LOG(LogTemp, Error, TEXT("Invalid tile (%d, %d)"), TileX, TileY);
-// 		return;
-// 	}
-//
-//
-// 	UMaterialInstanceDynamic* TileMaterial = UMaterialInstanceDynamic::Create(LoadedTiles[FIntPoint(TileX, TileY)]->GetMaterial(0), this);
-// 	TileMaterial->SetTextureParameterValue("BaseColorTexture", TileTexture);
-// 	
-// 	LoadedTiles[FIntPoint(TileX, TileY)]->SetMaterial(0, TileMaterial);
-// 	
-//
-// 	UE_LOG(LogTemp, Log, TEXT("Successfully applied texture to tile (%d, %d)"), TileX, TileY);
-// 	
-// 	// bool bHasData = ImageData.Num() == 0;
-// 	// bool bHasDownload = LoadedTiles.Contains(FIntPoint(TileX, TileY));
-// 	//
-// 	// if (bHasData || !bHasDownload)
-// 	// {
-// 	// 	UE_LOG(LogTemp, Warning, TEXT("Failed to download image for tile %d, %d"), TileX, TileY);
-// 	// 	return;
-// 	// }
-// 	//
-// 	// // Convert image data to Texture2D
-// 	// UTexture2D* TileTexture = FImageUtils::ImportBufferAsTexture2D(ImageData);
-// 	// if (TileTexture)
-// 	// {
-// 	// 	UMaterialInstanceDynamic* TileMaterial = UMaterialInstanceDynamic::Create(LoadedTiles[FIntPoint(TileX, TileY)]->GetMaterial(0), this);
-// 	// 	TileMaterial->SetTextureParameterValue("BaseColorTexture", TileTexture);
-// 	// 	LoadedTiles[FIntPoint(TileX, TileY)]->SetMaterial(0, TileMaterial);
-// 	// }
-// }
-//
-// FVector AHuntersGameWorldManager::GetTileWorldPosition(int32 TileX, int32 TileY)
-// {
-// 	return FVector(TileX * TileSize, TileY * TileSize, 0.0f);
-// }
-//
-// FPlayerTileLocation AHuntersGameWorldManager::GetPlayerTile()
-// {
-// 	int32 PlayerTileX = LongitudeToTileX(PlayerCoords.Longitude, Zoom);
-// 	int32 PlayerTileY = LatitudeToTileY(PlayerCoords.Latitude, Zoom);
-//
-// 	return {PlayerTileX, PlayerTileY};
-// }
-//
-// void AHuntersGameWorldManager::ConvertWorldToGPS(FVector WorldLocation, float& OutLat, float& OutLon)
-// {
-// 	float Scale = 0.0001f; // Adjust scale to match your map size
-// 	OutLat = PlayerCoords.Latitude + (WorldLocation.Y * TileSize);
-// 	OutLon = PlayerCoords.Longitude + (WorldLocation.X * TileSize);
-// }
+	// Calculate the x/y offsets in meters
+	double X = EarthRadius * (LonRad - OriginLonRad) * FMath::Cos(OriginLatRad);
+	double Y = EarthRadius * (LatRad - OriginLatRad);
+
+	// Apply scale factor to convert meters -> Unreal units
+	float ScaleFactor = 0.01f; // Adjust as needed for world scale
+	return FVector(X * ScaleFactor, -Y * ScaleFactor, 0.0f);
+}
 
 
 float AHuntersGameWorldManager::CalculateDistance(float InitialLat, float InitialLon, float FinalLat, float FinalLon)
@@ -499,31 +358,31 @@ float AHuntersGameWorldManager::CalculateDistance(float InitialLat, float Initia
 	return EarthRadius * C; // Distance in meters
 }
 
-float AHuntersGameWorldManager::GetGPSVelocity()
-{
-	if (ULocationServicesImpl* LocationServicesImpl = ULocationServices::GetLocationServicesImpl())
-	{
-		FLocationServicesData CurrentLocation = LocationServicesImpl->GetLastKnownLocation();
-		if (bHasPreviousLocation)
-		{
-			float Distance = CalculateDistance(PreviousLocation.Latitude, PreviousLocation.Longitude,
-				CurrentLocation.Latitude, CurrentLocation.Longitude);
-
-			float TimeDelta = (CurrentLocation.Timestamp - PreviousLocation.Timestamp) / 1000.0f; // Convert ms to seconds
-
-			if (TimeDelta > 0)
-			{
-				float Speed = Distance / TimeDelta; // Speed in meters per second
-				PreviousLocation = CurrentLocation;
-				return Speed;
-			}
-		}
-		// Store first location
-		PreviousLocation = CurrentLocation;
-		bHasPreviousLocation = true;
-	}
-	return 0.0f; // Default if no data
-}
+// float AHuntersGameWorldManager::GetGPSVelocity()
+// {
+// 	if (ULocationServicesImpl* LocationServicesImpl = ULocationServices::GetLocationServicesImpl())
+// 	{
+// 		FLocationServicesData CurrentLocation = LocationServicesImpl->GetLastKnownLocation();
+// 		if (bHasPreviousLocation)
+// 		{
+// 			float Distance = CalculateDistance(PreviousLocation.Latitude, PreviousLocation.Longitude,
+// 				CurrentLocation.Latitude, CurrentLocation.Longitude);
+//
+// 			float TimeDelta = (CurrentLocation.Timestamp - PreviousLocation.Timestamp) / 1000.0f; // Convert ms to seconds
+//
+// 			if (TimeDelta > 0)
+// 			{
+// 				float Speed = Distance / TimeDelta; // Speed in meters per second
+// 				PreviousLocation = CurrentLocation;
+// 				return Speed;
+// 			}
+// 		}
+// 		// Store first location
+// 		PreviousLocation = CurrentLocation;
+// 		bHasPreviousLocation = true;
+// 	}
+// 	return 0.0f; // Default if no data
+// }
 
 FVector2D AHuntersGameWorldManager::TileToLatLon(int32 TileX, int32 TileY)
 {
@@ -537,21 +396,33 @@ FVector2D AHuntersGameWorldManager::TileToLatLon(int32 TileX, int32 TileY)
 	return FVector2D(Lon, Lat);
 }
 
-FVector AHuntersGameWorldManager::TileToUnrealPosition(int32 TileX, int32 TileY)
+// FVector AHuntersGameWorldManager::TileToUnrealPosition(int32 TileX, int32 TileY)
+// {
+// 	const double n = FMath::Pow(2.0, Zoom);
+//
+// 	// Top-left corner latitude and longitude
+// 	double LonTopLeft = (TileX / n) * 360.0 - 180.0;
+// 	double LatTopLeft = FMath::RadiansToDegrees(FMath::Atan(FMath::Sinh(PI * (1 - 2 * TileY / n))));
+//
+// 	// Center of the tile
+// 	double LonCenter = ((TileX + 0.5) / n) * 360.0 - 180.0;
+// 	double LatCenter = FMath::RadiansToDegrees(FMath::Atan(FMath::Sinh(PI * (1 - 2 * (TileY + 0.5) / n))));
+//
+// 	// Convert to Unreal Engine coordinates (assume 1 tile = TileSizeUU units)
+// 	const float XPos = TileX * TileSize;
+// 	const float YPos = -TileY * TileSize;  // Flip Y since OSM has (0,0) at the top-left, but UE has (0,0) at bottom-left
+//
+// 	return FVector(XPos, YPos, 0.0f);  // Z = 0 (assuming flat plane)
+// }
+
+FVector AHuntersGameWorldManager::TileToUnrealPosition(int32 TileX, int32 TileY, int32 PlayerTileX, int32 PlayerTileY)
 {
-	const double n = FMath::Pow(2.0, Zoom);
+	// Offset each tile so that the player's tile is at (0,0,0)
+	int32 RelativeTileX = TileX - PlayerTileX;
+	int32 RelativeTileY = TileY - PlayerTileY;
 
-	// Top-left corner latitude and longitude
-	double LonTopLeft = (TileX / n) * 360.0 - 180.0;
-	double LatTopLeft = FMath::RadiansToDegrees(FMath::Atan(FMath::Sinh(PI * (1 - 2 * TileY / n))));
+	float XPos = (RelativeTileX + 0.5f) * TileSize;
+	float YPos = -(RelativeTileY + 0.5f) * TileSize; // Flip Y for UE coordinate system
 
-	// Center of the tile
-	double LonCenter = ((TileX + 0.5) / n) * 360.0 - 180.0;
-	double LatCenter = FMath::RadiansToDegrees(FMath::Atan(FMath::Sinh(PI * (1 - 2 * (TileY + 0.5) / n))));
-
-	// Convert to Unreal Engine coordinates (assume 1 tile = TileSizeUU units)
-	const float XPos = TileX * TileSize;
-	const float YPos = -TileY * TileSize;  // Flip Y since OSM has (0,0) at the top-left, but UE has (0,0) at bottom-left
-
-	return FVector(XPos, YPos, 0.0f);  // Z = 0 (assuming flat plane)
+	return FVector(XPos, YPos, 0.0f);  // Flat plane, so Z = 0
 }

@@ -4,6 +4,8 @@
 
 #include "HuntersGameWorldManager.generated.h"
 
+DECLARE_LOG_CATEGORY_EXTERN(HuntersGameWorldManagerLog, Log, All)
+
 class AHuntersGamePlaneActor;
 
 USTRUCT(Blueprintable, BlueprintType)
@@ -72,8 +74,11 @@ public:
 	UFUNCTION(BlueprintPure)
 	FVector2D TileToLatLon(int32 TileX, int32 TileY);
 
+	// UFUNCTION(BlueprintPure)
+	// FVector TileToUnrealPosition(int32 TileX, int32 TileY);
+
 	UFUNCTION(BlueprintPure)
-	FVector TileToUnrealPosition(int32 TileX, int32 TileY);
+	FVector TileToUnrealPosition(int32 TileX, int32 TileY, int32 PlayerTileX, int32 PlayerTileY);
 	
 private:
 	UFUNCTION(CallInEditor, Category = "Grid")
@@ -94,25 +99,9 @@ private:
 	UFUNCTION(CallInEditor, Category = "Grid")
 	void UpdateMap();
 	
-	// UFUNCTION(BlueprintCallable)
-	// void LoadTile(int32 TileX, int32 TileY);
-	//
-	
 	UFUNCTION(BlueprintCallable)
 	void UnloadTiles(int32 TileX, int32 TileY);
 	
-	// UFUNCTION(BlueprintCallable)
-	// FPlayerTileLocation GetPlayerTile();
-	//
-	// UFUNCTION(BlueprintCallable)
-	// FVector GetTileWorldPosition(int32 TileX, int32 TileY);
-	//
-	// void ConvertWorldToGPS(FVector WorldLocation, float& OutLat, float& OutLon);
-	//
-	// void DownloadTileImage(int32 TileX, int32 TileY);
-	//
-	// void OnImageDownloaded(int32 TileX, int32 TileY, TArray<uint8> ImageData);
-
 	FVector ConvertLatLonToUECoords(double Latitude, double Longitude, double InOriginLatitude, double InOriginLongitude);
 	
 	UFUNCTION(BlueprintPure)
@@ -123,8 +112,8 @@ private:
 	UFUNCTION(BlueprintCallable)
 	float CalculateDistance(float InitialLat, float InitialLon, float FinalLat, float FinalLon);
 
-	UFUNCTION(BlueprintCallable)
-	float GetGPSVelocity();
+	// UFUNCTION(BlueprintCallable)
+	// float GetGPSVelocity();
 protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
